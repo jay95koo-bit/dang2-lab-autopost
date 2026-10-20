@@ -1,0 +1,13 @@
+name: check connection
+on:
+  push:
+    paths: ["check.py", ".github/workflows/check.yml"]
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python check.py
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
