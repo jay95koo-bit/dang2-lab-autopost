@@ -2,15 +2,15 @@
 import json, os, urllib.request, urllib.parse
 T = os.environ.get("IG_TOKEN", "")
 if not T:
-    raise SystemExit("IG_TOKEN 없음")
+    print("::error::IG_TOKEN 없음"); raise SystemExit(1)
 def get(path, **p):
     p["access_token"] = T
     try:
         with urllib.request.urlopen("https://graph.instagram.com/" + path + "?" + urllib.parse.urlencode(p), timeout=30) as r:
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
-        raise SystemExit("API error %s: %s" % (e.code, e.read().decode(errors="replace").replace(T, "***")))
+        msg = "API error %s: %s" % (e.code, e.read().decode(errors="replace").replace(T, "***")); print("::error::" + msg); raise SystemExit(1)
 me = get("me", fields="user_id,username,account_type")
-print("account:", me.get("username"), me.get("account_type"))
+print("::notice::account " + str(me.get("username")) + " " + str(me.get("account_type")))
 lim = get(f"{me['user_id']}/content_publishing_limit", fields="quota_usage,config")
-print("publish limit:", json.dumps(lim))
+print("::notice::limit " + json.dumps(lim))
