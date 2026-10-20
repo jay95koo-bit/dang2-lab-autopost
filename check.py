@@ -14,3 +14,4 @@ me = get("me", fields="user_id,username,account_type")
 print("::notice::account " + str(me.get("username")) + " " + str(me.get("account_type")))
 lim = get(f"{me['user_id']}/content_publishing_limit", fields="quota_usage,config")
 print("::notice::limit " + json.dumps(lim))
+# rerun 1792507495
