@@ -60,7 +60,8 @@ def due_post(now):
 
 def main():
     if not TOKEN:
-        sys.exit("IG_TOKEN secret is missing")
+        print("IG_TOKEN secret is missing - skipping until it is added")
+        return
     now = dt.datetime.now(dt.timezone.utc)
     # 밀린 게시물이 한꺼번에 올라가지 않도록 최근 게시 후 3시간은 쉰다
     last = [dt.datetime.fromisoformat(json.loads(p.read_text(encoding="utf-8"))["posted_at"])
