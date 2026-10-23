@@ -8,6 +8,7 @@ import json
 import os
 import pathlib
 import sys
+import random
 import time
 import urllib.parse
 import urllib.request
@@ -47,6 +48,46 @@ def wait_ready(cid):
     raise SystemExit(f"container {cid} not ready")
 
 
+KST = dt.timezone(dt.timedelta(hours=9))
+SLOTS = [(12, 30), (20, 30)]  # 게시 시간대 (KST)
+STALE = dt.timedelta(hours=6)  # 이보다 오래 밀린 게시물은 맨 뒤로 미룬다
+
+
+def next_slot(after):
+    t = after.astimezone(KST)
+    for day in range(3):
+        base = (t + dt.timedelta(days=day)).date()
+        for h, m in SLOTS:
+            c = dt.datetime(base.year, base.month, base.day, h, m, tzinfo=KST)
+            if c > t:
+                return c
+    raise RuntimeError("no slot")
+
+
+def reschedule_stale(now):
+    """오래 밀린 게시물을 몰아 올리지 않도록 예약된 마지막 게시물 다음 시간대로 옮긴다."""
+    pending = []
+    for d in sorted(POSTS.iterdir()):
+        pj = d / "post.json"
+        if pj.exists() and not (d / "posted.json").exists():
+            pending.append((d, json.loads(pj.read_text(encoding="utf-8"))))
+    if not pending:
+        return
+    last = max(dt.datetime.fromisoformat(p["time"]) for _, p in pending)
+    for d, post in pending:
+        t = dt.datetime.fromisoformat(post["time"])
+        if now - t <= STALE:
+            continue
+        last = next_slot(max(last, now))
+        post["time"] = last.isoformat(timespec="seconds")
+        (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
+        suffix = d.name.split("-", 4)[4] if d.name.count("-") >= 4 else d.name
+        new = POSTS / f"{last:%Y-%m-%d-%H%M}-{suffix}"
+        if not new.exists():
+            d.rename(new)
+        print("rescheduled", d.name, "->", new.name, post["time"])
+
+
 def due_post(now):
     for d in sorted(POSTS.iterdir()):
         pj = d / "post.json"
@@ -63,6 +104,7 @@ def main():
         print("IG_TOKEN secret is missing - skipping until it is added")
         return
     now = dt.datetime.now(dt.timezone.utc)
+    reschedule_stale(now)
     # 밀린 게시물이 한꺼번에 올라가지 않도록 최근 게시 후 3시간은 쉰다
     last = [dt.datetime.fromisoformat(json.loads(p.read_text(encoding="utf-8"))["posted_at"])
             for p in POSTS.glob("*/posted.json")]
@@ -73,6 +115,11 @@ def main():
     if not d:
         print("no post due")
         return
+    # 매번 정각에 올라가지 않도록 1~12분 무작위로 기다린다 (POST_JITTER=0 이면 생략)
+    jitter = random.randint(60, 720) if os.environ.get("POST_JITTER", "1") != "0" else 0
+    print(f"posting {d.name} after {jitter}s")
+    time.sleep(jitter)
+    now = dt.datetime.now(dt.timezone.utc)
     me = call("GET", "me", fields="user_id,username")
     ig = me["user_id"]
     n = len(post["slides"])
