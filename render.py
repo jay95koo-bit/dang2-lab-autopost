@@ -39,20 +39,26 @@ p{{font-size:37px;font-weight:500;line-height:1.75;color:rgba(255,255,255,.94)}}
 .table{{display:grid;grid-template-columns:1fr 1fr;border-top:2px solid rgba(255,255,255,.25)}}
 .table div{{padding:22px 8px;font-size:38px;border-bottom:2px solid rgba(255,255,255,.15)}}
 .table .v{{text-align:right;font-weight:700;color:{ACCENT}}}
-/* places: 장소 총정리 (밝은 배경, 사진 없음) */
-body.light{{background:#F5F1EA;color:#1F1A16}}
-.pl{{position:absolute;inset:0;padding:64px 72px 0;display:flex;flex-direction:column;gap:18px}}
-.pl .tag{{align-self:flex-start;background:#1F1A16;color:#fff;font-size:30px;font-weight:700;padding:10px 22px;border-radius:12px}}
-.pl h2{{font-size:58px;font-weight:900;letter-spacing:-2px;line-height:1.2;margin-bottom:10px}}
-.card{{background:#fff;border-radius:26px;padding:22px 32px;display:flex;flex-direction:column;gap:10px;box-shadow:0 3px 0 rgba(0,0,0,.05)}}
-.nm{{display:flex;align-items:center;gap:16px;flex-wrap:wrap}}
-.nm b{{font-size:44px;font-weight:900;letter-spacing:-1.5px}}
-.nm i{{font-style:normal;font-size:26px;font-weight:700;color:#6B5E52;background:#EFE8DD;padding:6px 14px;border-radius:10px}}
-.chips{{display:flex;gap:10px;flex-wrap:wrap}}
-.chips span{{font-size:27px;font-weight:700;background:#E6F5C9;color:#2F4A0E;padding:6px 16px;border-radius:10px;letter-spacing:-.5px}}
-.ft{{font-size:28px;font-weight:500;color:#5A4E44;letter-spacing:-.5px;line-height:1.45}}
-.note{{position:absolute;left:72px;right:72px;bottom:44px;display:flex;justify-content:space-between;font-size:25px;color:#8A7C70}}
-.note b{{color:{ACCENT};font-weight:900;font-size:30px;filter:brightness(.85)}}
+/* places: 장소 총정리 (밝은 배경, 2x2 사진 격자) */
+body.light{{background:#F4F2EE;color:#1F1A16}}
+.pl{{position:absolute;inset:0;padding:58px 64px 0}}
+.pl .kick{{text-align:center;font-size:32px;font-weight:700;letter-spacing:-.5px;color:#3a332d}}
+.pl .ttl{{display:flex;justify-content:center;align-items:center;gap:18px;margin:14px 0 34px}}
+.pl .ttl b{{background:#1F1A16;color:#fff;font-size:66px;font-weight:900;padding:2px 22px 6px;letter-spacing:-2px}}
+.pl .ttl span{{font-size:66px;font-weight:900;letter-spacing:-2.5px}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:26px 34px}}
+.tile{{display:flex;flex-direction:column;align-items:center}}
+.ph{{position:relative;width:100%;height:372px;border:4px solid #1F1A16;border-radius:30px;overflow:hidden;background:#ddd}}
+.ph img{{width:100%;height:100%;object-fit:cover;display:block}}
+.ph .area{{position:absolute;top:22px;left:0;background:#EEF9C9;border:3px solid #1F1A16;border-left:none;font-size:29px;font-weight:700;padding:6px 20px 8px 18px}}
+.ph .ic{{position:absolute;right:14px;bottom:10px;font-size:18px;color:rgba(255,255,255,.85);text-shadow:0 1px 3px rgba(0,0,0,.6)}}
+.tile .nm{{font-size:44px;font-weight:900;letter-spacing:-1.5px;margin-top:16px;line-height:1.15;text-align:center}}
+.tile .cd{{font-size:26px;font-weight:600;letter-spacing:-.8px;color:#2f2a25;margin-top:8px;text-align:center;line-height:1.3}}
+.cta .ph{{background:#EEF9C9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}}
+.cta .ph div{{font-size:46px;font-weight:900;letter-spacing:-1.5px;line-height:1.3;white-space:pre-line}}
+.cta .ph p{{font-size:28px;color:#3a332d;line-height:1.5;white-space:pre-line;padding:0 24px}}
+.note{{position:absolute;left:64px;right:64px;bottom:34px;display:flex;justify-content:space-between;align-items:flex-end;font-size:23px;color:#8A7C70}}
+.note b{{color:#C98418;font-weight:900;font-size:30px}}
 """
 
 
@@ -63,14 +69,20 @@ def esc(s):
 def slide_html(s, photo_src):
     t = s.get("type", "body")
     if t == "places":
-        cards = "".join(
-            f'<div class="card"><div class="nm"><b>{esc(x["name"])}</b><i>{esc(x["area"])}</i></div>'
-            f'<div class="chips">{"".join(f"<span>{esc(c)}</span>" for c in x.get("chips", []))}</div>'
-            f'<div class="ft">{esc(x.get("desc"))}</div></div>' for x in s["items"])
-        tag = f'<div class="tag">{esc(s["tag"])}</div>' if s.get("tag") else ""
+        tiles = []
+        for x in s["items"]:
+            if x.get("cta"):
+                tiles.append(f'<div class="tile cta"><div class="ph"><div>{esc(x["h"])}</div><p>{esc(x.get("p"))}</p></div></div>')
+                continue
+            img = f'<img src="{x["_src"]}">' if x.get("_src") else ""
+            tiles.append(f'<div class="tile"><div class="ph">{img}<div class="area">{esc(x["area"])}</div>'
+                         f'<div class="ic">이미지 컷</div></div>'
+                         f'<div class="nm">{esc(x["name"])}</div><div class="cd">{esc(" / ".join(x.get("chips", [])))}</div></div>')
         return (f'<html><head><meta charset="utf-8"><style>{CSS}</style></head><body class="light">'
-                f'<div class="pl">{tag}<h2>{esc(s["h"])}</h2>{cards}</div>'
-                f'<div class="note"><span>{esc(s.get("note", "2026년 10월 기준 · 방문 전 매장에 꼭 확인해 주세요"))}</span><b>{HANDLE}</b></div>'
+                f'<div class="pl"><div class="kick">{esc(s.get("kicker"))}</div>'
+                f'<div class="ttl"><b>{esc(s["region"])}</b><span>{esc(s["h"])}</span></div>'
+                f'<div class="grid">{"".join(tiles)}</div></div>'
+                f'<div class="note"><span>{esc(s.get("note", "2026년 10월 기준 · 방문 전 매장에 꼭 확인해 주세요 · 사진은 이미지 컷"))}</span><b>{HANDLE}</b></div>'
                 f'</body></html>')
     parts = [f'<img class="photo" src="{photo_src}">']
     if t == "cover":
@@ -155,6 +167,9 @@ def render_post(d, page, cache, used, local_dir):
     if changed:
         (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
     for i, s in enumerate(post["slides"], 1):
+        for x in s.get("items", []):
+            if x.get("photo"):
+                x["_src"] = fetch_photo(x["photo"], cache, local_dir).resolve().as_uri()
         photo = fetch_photo(s["photo"], cache, local_dir).resolve().as_uri() if s.get("photo") else ""
         tmp = d / f"_slide{i}.html"
         tmp.write_text(slide_html(s, photo), encoding="utf-8")
