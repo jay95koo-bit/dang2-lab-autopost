@@ -39,6 +39,20 @@ p{{font-size:37px;font-weight:500;line-height:1.75;color:rgba(255,255,255,.94)}}
 .table{{display:grid;grid-template-columns:1fr 1fr;border-top:2px solid rgba(255,255,255,.25)}}
 .table div{{padding:22px 8px;font-size:38px;border-bottom:2px solid rgba(255,255,255,.15)}}
 .table .v{{text-align:right;font-weight:700;color:{ACCENT}}}
+/* places: 장소 총정리 (밝은 배경, 사진 없음) */
+body.light{{background:#F5F1EA;color:#1F1A16}}
+.pl{{position:absolute;inset:0;padding:64px 72px 0;display:flex;flex-direction:column;gap:18px}}
+.pl .tag{{align-self:flex-start;background:#1F1A16;color:#fff;font-size:30px;font-weight:700;padding:10px 22px;border-radius:12px}}
+.pl h2{{font-size:58px;font-weight:900;letter-spacing:-2px;line-height:1.2;margin-bottom:10px}}
+.card{{background:#fff;border-radius:26px;padding:22px 32px;display:flex;flex-direction:column;gap:10px;box-shadow:0 3px 0 rgba(0,0,0,.05)}}
+.nm{{display:flex;align-items:center;gap:16px;flex-wrap:wrap}}
+.nm b{{font-size:44px;font-weight:900;letter-spacing:-1.5px}}
+.nm i{{font-style:normal;font-size:26px;font-weight:700;color:#6B5E52;background:#EFE8DD;padding:6px 14px;border-radius:10px}}
+.chips{{display:flex;gap:10px;flex-wrap:wrap}}
+.chips span{{font-size:27px;font-weight:700;background:#E6F5C9;color:#2F4A0E;padding:6px 16px;border-radius:10px;letter-spacing:-.5px}}
+.ft{{font-size:28px;font-weight:500;color:#5A4E44;letter-spacing:-.5px;line-height:1.45}}
+.note{{position:absolute;left:72px;right:72px;bottom:44px;display:flex;justify-content:space-between;font-size:25px;color:#8A7C70}}
+.note b{{color:{ACCENT};font-weight:900;font-size:30px;filter:brightness(.85)}}
 """
 
 
@@ -48,6 +62,16 @@ def esc(s):
 
 def slide_html(s, photo_src):
     t = s.get("type", "body")
+    if t == "places":
+        cards = "".join(
+            f'<div class="card"><div class="nm"><b>{esc(x["name"])}</b><i>{esc(x["area"])}</i></div>'
+            f'<div class="chips">{"".join(f"<span>{esc(c)}</span>" for c in x.get("chips", []))}</div>'
+            f'<div class="ft">{esc(x.get("desc"))}</div></div>' for x in s["items"])
+        tag = f'<div class="tag">{esc(s["tag"])}</div>' if s.get("tag") else ""
+        return (f'<html><head><meta charset="utf-8"><style>{CSS}</style></head><body class="light">'
+                f'<div class="pl">{tag}<h2>{esc(s["h"])}</h2>{cards}</div>'
+                f'<div class="note"><span>{esc(s.get("note", "2026년 10월 기준 · 방문 전 매장에 꼭 확인해 주세요"))}</span><b>{HANDLE}</b></div>'
+                f'</body></html>')
     parts = [f'<img class="photo" src="{photo_src}">']
     if t == "cover":
         parts.append('<div class="shade" style="height:820px"></div>')
@@ -120,6 +144,27 @@ def resolve_query(q, used):
     raise SystemExit(f"no photo for '{q}'")
 
 
+def render_post(d, page, cache, used, local_dir):
+    post = json.loads((d / "post.json").read_text(encoding="utf-8"))
+    changed = False
+    for s in post["slides"]:
+        if isinstance(s.get("photo"), str) and s["photo"]:
+            s["photo_query"] = s["photo"]
+            s["photo"] = resolve_query(s["photo"], used)
+            changed = True
+    if changed:
+        (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
+    for i, s in enumerate(post["slides"], 1):
+        photo = fetch_photo(s["photo"], cache, local_dir).resolve().as_uri() if s.get("photo") else ""
+        tmp = d / f"_slide{i}.html"
+        tmp.write_text(slide_html(s, photo), encoding="utf-8")
+        page.goto(tmp.resolve().as_uri())
+        page.wait_for_timeout(300)
+        page.screenshot(path=str(d / f"{i}.jpg"), type="jpeg", quality=92)
+        tmp.unlink()
+    print("rendered", d.name, len(post["slides"]), "slides")
+
+
 def main():
     local_dir = sys.argv[sys.argv.index("--local") + 1] if "--local" in sys.argv else None
     from playwright.sync_api import sync_playwright
@@ -134,25 +179,15 @@ def main():
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": W, "height": H})
         used = used_ids()
+        failed = []
         for d in todo:
-            post = json.loads((d / "post.json").read_text(encoding="utf-8"))
-            changed = False
-            for s in post["slides"]:
-                if isinstance(s.get("photo"), str):
-                    s["photo_query"] = s["photo"]
-                    s["photo"] = resolve_query(s["photo"], used)
-                    changed = True
-            if changed:
-                (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
-            for i, s in enumerate(post["slides"], 1):
-                photo = fetch_photo(s["photo"], cache, local_dir)
-                tmp = d / f"_slide{i}.html"
-                tmp.write_text(slide_html(s, photo.resolve().as_uri()), encoding="utf-8")
-                page.goto(tmp.resolve().as_uri())
-                page.wait_for_timeout(300)
-                page.screenshot(path=str(d / f"{i}.jpg"), type="jpeg", quality=92)
-                tmp.unlink()
-            print("rendered", d.name, len(post["slides"]), "slides")
+            try:
+                render_post(d, page, cache, used, local_dir)
+            except Exception as e:  # 한 게시물이 실패해도 나머지는 계속 만든다
+                failed.append(d.name)
+                for f in d.glob("*.jpg"):
+                    f.unlink()
+                print(f"::warning::{d.name} 렌더 실패: {e}")
         browser.close()
 
 
