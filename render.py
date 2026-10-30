@@ -183,7 +183,7 @@ def main():
         for d in todo:
             try:
                 render_post(d, page, cache, used, local_dir)
-            except Exception as e:  # 한 게시물이 실패해도 나머지는 계속 만든다
+            except (Exception, SystemExit) as e:  # 한 게시물이 실패해도 나머지는 계속 만든다
                 failed.append(d.name)
                 for f in d.glob("*.jpg"):
                     f.unlink()
