@@ -21,6 +21,10 @@ REPO = os.environ.get("GITHUB_REPOSITORY", "")
 BRANCH = os.environ.get("GITHUB_REF_NAME", "main")
 
 
+class APIError(SystemExit):
+    pass
+
+
 def call(method, path, **params):
     params["access_token"] = TOKEN
     data = urllib.parse.urlencode(params).encode()
@@ -34,7 +38,7 @@ def call(method, path, **params):
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace").replace(TOKEN, "***")
-        raise SystemExit(f"API error {e.code} on {path}: {body}")
+        raise APIError(f"API error {e.code} on {path}: {body}")
 
 
 def wait_ready(cid):
@@ -136,7 +140,16 @@ def main():
         cid = call("POST", f"{ig}/media", media_type="CAROUSEL", children=",".join(kids),
                    caption=post["caption"])["id"]
     wait_ready(cid)
-    res = call("POST", f"{ig}/media_publish", creation_id=cid)
+    # 상태가 FINISHED여도 가끔 "Media ID is not available"(9007)이 나므로 잠시 후 다시 시도한다
+    for attempt in range(6):
+        try:
+            res = call("POST", f"{ig}/media_publish", creation_id=cid)
+            break
+        except APIError as e:
+            if '"code":9007' not in str(e) or attempt == 5:
+                raise
+            print("media not ready yet, retrying publish")
+            time.sleep(20)
     (d / "posted.json").write_text(json.dumps({"media_id": res.get("id"), "posted_at": now.isoformat(),
                                                "account": me.get("username")}, ensure_ascii=False, indent=1),
                                    encoding="utf-8")
