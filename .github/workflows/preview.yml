@@ -1,0 +1,16 @@
+name: photo preview
+on:
+  push:
+    branches: [photo-preview]
+    paths: ["preview/cands.txt", "preview/make.py"]
+permissions:
+  contents: write
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pillow && python preview/make.py
+      - run: |
+          git config user.name "dang2-lab-bot"; git config user.email "actions@users.noreply.github.com"
+          git add preview && git commit -m "preview sheets" && git push
