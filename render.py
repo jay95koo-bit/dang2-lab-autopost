@@ -156,6 +156,48 @@ def resolve_query(q, used):
     raise SystemExit(f"no photo for '{q}'")
 
 
+CTA = ROOT / "assets" / "cta.jpg"  # 모든 게시물 맨 마지막 장 (publish.py 가 붙임)
+
+CTA_CSS = f"""
+body.ctab{{background:#2B2622}}
+.ctaw{{position:absolute;inset:0;padding:96px 88px 0;display:flex;flex-direction:column}}
+.ctaw .hd{{font-size:44px;font-weight:900;color:{ACCENT};letter-spacing:-1px}}
+.ctaw h1{{font-size:96px;margin:40px 0 28px}}
+.ctaw .sub{{font-size:40px;font-weight:500;line-height:1.6;color:rgba(255,255,255,.9)}}
+.rows{{margin-top:50px;display:flex;flex-direction:column;gap:22px}}
+.row{{display:flex;align-items:center;gap:30px;background:rgba(255,255,255,.08);border-radius:26px;padding:30px 36px}}
+.row .k{{flex-shrink:0;width:150px;text-align:center;background:{ACCENT};color:#1E1A17;font-size:36px;font-weight:900;
+  border-radius:999px;padding:10px 0}}
+.row .t{{font-size:38px;font-weight:700;letter-spacing:-1px;line-height:1.35}}
+.follow{{position:absolute;left:88px;right:88px;bottom:96px;text-align:center;border:4px solid {ACCENT};border-radius:999px;
+  padding:26px 0;font-size:46px;font-weight:900;color:{ACCENT};letter-spacing:-1px}}
+"""
+
+
+def cta_html():
+    rows = [("저장", "필요할 때 바로 꺼내 보세요"),
+            ("공유", "댕냥이 키우는 친구에게 보내 주세요"),
+            ("팔로우", "유용한 정보, 놓치지 않게 알려드려요")]
+    r = "".join(f'<div class="row"><span class="k">{k}</span><span class="t">{esc(t)}</span></div>' for k, t in rows)
+    return (f'<html><head><meta charset="utf-8"><style>{CSS}{CTA_CSS}</style></head><body class="ctab">'
+            f'<div class="ctaw"><div class="hd">{HANDLE}</div>'
+            f'<h1>오늘 정보,\n도움이 됐나요?</h1>'
+            f'<div class="sub">댕냥이에게 정말 유용한 정보만 드려요.<br>팔로우해 주시면 실망시키지 않을게요!</div>'
+            f'<div class="rows">{r}</div></div>'
+            f'<div class="follow">@{HANDLE} 팔로우하기</div></body></html>')
+
+
+def render_cta(page):
+    CTA.parent.mkdir(exist_ok=True)
+    tmp = CTA.parent / "_cta.html"
+    tmp.write_text(cta_html(), encoding="utf-8")
+    page.goto(tmp.resolve().as_uri())
+    page.wait_for_timeout(300)
+    page.screenshot(path=str(CTA), type="jpeg", quality=92)
+    tmp.unlink()
+    print("rendered", CTA.name)
+
+
 def render_post(d, page, cache, used, local_dir):
     post = json.loads((d / "post.json").read_text(encoding="utf-8"))
     changed = False
@@ -187,6 +229,11 @@ def main():
     cache = ROOT / ".photo_cache"
     cache.mkdir(exist_ok=True)
     todo = [d for d in sorted(POSTS.iterdir()) if (d / "post.json").exists() and not (d / "1.jpg").exists()]
+    if not CTA.exists() or "--cta" in sys.argv:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            render_cta(browser.new_page(viewport={"width": W, "height": H}))
+            browser.close()
     if not todo:
         print("nothing to render")
         return

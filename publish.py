@@ -52,6 +52,10 @@ def wait_ready(cid):
     raise SystemExit(f"container {cid} not ready")
 
 
+COMMENT = ("댕냥이 키우는 데 정말 유용한 정보만 드릴게요! 🐶🐱\n"
+           "팔로우해 주시면 절대 실망시키지 않을게요 🙌\n"
+           "도움이 됐다면 저장하고, 필요한 친구에게 공유해 주세요 💛")
+
 KST = dt.timezone(dt.timedelta(hours=9))
 SLOTS = [(12, 30), (20, 30)]  # 게시 시간대 (KST)
 STALE = dt.timedelta(hours=6)  # 이보다 오래 밀린 게시물은 맨 뒤로 미룬다
@@ -127,7 +131,12 @@ def main():
     me = call("GET", "me", fields="user_id,username")
     ig = me["user_id"]
     n = len(post["slides"])
-    urls = [f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/posts/{d.name}/{i}.jpg" for i in range(1, n + 1)]
+    raw = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}"
+    urls = [f"{raw}/posts/{d.name}/{i}.jpg" for i in range(1, n + 1)]
+    # 맨 마지막 장에 저장·공유·팔로우 안내 카드를 붙인다 (캐러셀은 최대 10장)
+    if (ROOT / "assets" / "cta.jpg").exists() and not post.get("no_cta") and n < 10:
+        urls.append(f"{raw}/assets/cta.jpg")
+        n += 1
     if n == 1:
         cid = call("POST", f"{ig}/media", image_url=urls[0], caption=post["caption"])["id"]
     else:
@@ -150,10 +159,19 @@ def main():
                 raise
             print("media not ready yet, retrying publish")
             time.sleep(20)
-    (d / "posted.json").write_text(json.dumps({"media_id": res.get("id"), "posted_at": now.isoformat(),
-                                               "account": me.get("username")}, ensure_ascii=False, indent=1),
-                                   encoding="utf-8")
+    info = {"media_id": res.get("id"), "posted_at": now.isoformat(), "account": me.get("username")}
+    (d / "posted.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
     print("published", d.name, res.get("id"))
+    # 첫 댓글로 팔로우 안내를 남긴다. 실패해도 게시는 이미 끝났으니 경고만 남긴다
+    comment = post.get("comment", COMMENT)
+    if comment and res.get("id"):
+        try:
+            info["comment_id"] = call("POST", f"{res['id']}/comments", message=comment).get("id")
+            print("commented", info["comment_id"])
+        except APIError as e:
+            info["comment_error"] = str(e)[:300]
+            print(f"::warning::댓글 달기 실패: {e}")
+        (d / "posted.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 if __name__ == "__main__":
