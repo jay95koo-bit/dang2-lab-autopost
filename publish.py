@@ -107,11 +107,26 @@ def due_post(now):
     return None, None
 
 
+COOLDOWN = ROOT / "state" / "cooldown.json"
+BLOCK_PAUSE = dt.timedelta(hours=24)
+
+
+def blocked(e):
+    s = str(e)
+    return "2207051" in s or "action is blocked" in s
+
+
 def main():
     if not TOKEN:
         print("IG_TOKEN secret is missing - skipping until it is added")
         return
     now = dt.datetime.now(dt.timezone.utc)
+    # Instagram이 활동을 제한하면(action is blocked) 계속 시도할수록 길어지므로 24시간 쉰다
+    if COOLDOWN.exists():
+        until = dt.datetime.fromisoformat(json.loads(COOLDOWN.read_text(encoding="utf-8"))["until"])
+        if now < until:
+            print(f"cooling down after Instagram action block until {until.isoformat()}")
+            return
     reschedule_stale(now)
     # 밀린 게시물이 한꺼번에 올라가지 않도록 최근 게시 후 3시간은 쉰다
     last = [dt.datetime.fromisoformat(json.loads(p.read_text(encoding="utf-8"))["posted_at"])
@@ -155,6 +170,12 @@ def main():
             res = call("POST", f"{ig}/media_publish", creation_id=cid)
             break
         except APIError as e:
+            if blocked(e):
+                COOLDOWN.parent.mkdir(exist_ok=True)
+                COOLDOWN.write_text(json.dumps({"until": (now + BLOCK_PAUSE).isoformat(), "error": str(e)[:300]},
+                                               ensure_ascii=False, indent=1), encoding="utf-8")
+                print(f"::error::Instagram이 활동을 제한했어요. 24시간 쉬고 다시 시도해요: {e}")
+                raise
             if '"code":9007' not in str(e) or attempt == 5:
                 raise
             print("media not ready yet, retrying publish")
