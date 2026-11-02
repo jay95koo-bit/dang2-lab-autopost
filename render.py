@@ -143,7 +143,7 @@ def resolve_query(q, used):
     import os
     key = os.environ.get("PEXELS_KEY")
     if not key:
-        raise SystemExit(f"photo query '{q}' needs PEXELS_KEY secret")
+        raise SystemExit(f"photo query '{q}' needs PEXELS_KEY secret - photo 에 Pexels 사진 번호(숫자)를 넣으세요 (README '사진 고르기')")
     url = "https://api.pexels.com/v1/search?" + urllib.parse.urlencode(
         {"query": q, "orientation": "portrait", "per_page": 20})
     req = urllib.request.Request(url, headers={"Authorization": key, "User-Agent": "Mozilla/5.0"})
@@ -251,6 +251,8 @@ def main():
                     f.unlink()
                 print(f"::warning::{d.name} 렌더 실패: {e}")
         browser.close()
+    if failed:  # 실패를 성공으로 숨기지 않는다 (만들어진 이미지는 다음 단계에서 그대로 커밋됨)
+        raise SystemExit(f"렌더 실패 {len(failed)}개: {', '.join(failed)}")
 
 
 if __name__ == "__main__":

@@ -27,4 +27,14 @@
 | `GH_PAT` | `IG_TOKEN` 자동 연장용 GitHub 개인 액세스 토큰 (이 저장소, Secrets 읽기·쓰기 권한) |
 | `PEXELS_KEY` | (선택) Pexels API 키. 사진을 검색어로 고를 때만 필요해요 |
 
+## 사진 고르기 (중요)
+
+Pexels API 키(`PEXELS_KEY`)는 없어요. 그래서 `post.json` 의 `photo` 에는 **검색어가 아니라 Pexels 사진 번호(숫자)** 를 넣어야 해요.
+검색어를 넣으면 그 게시물은 카드 이미지가 하나도 만들어지지 않고 **render cards** 작업이 실패로 표시돼요.
+
+1. 웹 검색(`pexels photo <장면 설명>`, pexels.com 한정)으로 `pexels.com/photo/<설명>-<번호>/` 링크를 찾아 장마다 후보 2~4개를 모아요.
+2. `photo-preview` 브랜치의 `preview/cands.txt` 에 `<게시물번호>-<장번호> 후보번호…` 를 적어 push 하면,
+   그 브랜치의 **photo preview** 작업이 후보 썸네일을 모아 `preview/<게시물번호>.jpg` 로 커밋해요. 열어 보고 골라요(빨간 칸은 없는 사진).
+3. 고른 번호를 `"photo": 12345678`, 원래 설명은 `"photo_query"` 에 남겨요. 이미 다른 게시물에 쓴 번호는 다시 쓰지 않아요.
+
 사진: [Pexels](https://www.pexels.com) 무료 이미지
