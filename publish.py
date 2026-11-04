@@ -113,7 +113,8 @@ def one_per_day(now):
         if prev and want.date() <= prev.date():
             want = (prev + dt.timedelta(days=1)).replace(hour=h, minute=m)
         prev = want
-        if want == t:
+        # 이미 시간이 지난 게시물은 폴더를 옮기지 않는다 (옮기면 이번 실행의 이미지 주소가 아직 GitHub에 없다)
+        if want == t or want <= now:
             continue
         post["time"] = want.isoformat(timespec="seconds")
         (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
