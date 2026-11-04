@@ -52,18 +52,17 @@ def wait_ready(cid):
     raise SystemExit(f"container {cid} not ready")
 
 
-COMMENT = ("댕냥이 키우는 데 정말 유용한 정보만 드릴게요! 🐶🐱\n"
-           "팔로우해 주시면 절대 실망시키지 않을게요 🙌\n"
-           "도움이 됐다면 저장하고, 필요한 친구에게 공유해 주세요 💛")
+# 자동 첫 댓글은 스팸으로 보일 수 있어 끈다 (post.json에 "comment"를 넣은 게시물만 단다)
+COMMENT = ""
 
 KST = dt.timezone(dt.timedelta(hours=9))
-SLOTS = [(12, 30), (20, 30)]  # 게시 시간대 (KST)
+SLOTS = [(12, 30)]  # 게시 시간대 (KST) - 활동 제한을 피하려고 하루 1개만 올린다
 STALE = dt.timedelta(hours=6)  # 이보다 오래 밀린 게시물은 맨 뒤로 미룬다
 
 
 def next_slot(after):
     t = after.astimezone(KST)
-    for day in range(3):
+    for day in range(4):
         base = (t + dt.timedelta(days=day)).date()
         for h, m in SLOTS:
             c = dt.datetime(base.year, base.month, base.day, h, m, tzinfo=KST)
@@ -128,10 +127,10 @@ def main():
             print(f"cooling down after Instagram action block until {until.isoformat()}")
             return
     reschedule_stale(now)
-    # 밀린 게시물이 한꺼번에 올라가지 않도록 최근 게시 후 3시간은 쉰다
+    # 하루 1개만 올라가도록 최근 게시 후 20시간은 쉰다
     last = [dt.datetime.fromisoformat(json.loads(p.read_text(encoding="utf-8"))["posted_at"])
             for p in POSTS.glob("*/posted.json")]
-    if last and now - max(last) < dt.timedelta(hours=3):
+    if last and now - max(last) < dt.timedelta(hours=20):
         print("posted recently, waiting")
         return
     d, post = due_post(now)
