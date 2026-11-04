@@ -95,6 +95,35 @@ def reschedule_stale(now):
         print("rescheduled", d.name, "->", new.name, post["time"])
 
 
+def one_per_day(now):
+    """남은 게시물이 하루 1개(12:30)가 되도록 시간을 맞춘다. 주간 작업이 하루 2개로 만들어도 여기서 정리된다."""
+    pending = []
+    for d in sorted(POSTS.iterdir()):
+        pj = d / "post.json"
+        if pj.exists() and not (d / "posted.json").exists():
+            pending.append((d, json.loads(pj.read_text(encoding="utf-8"))))
+    pending.sort(key=lambda x: x[1]["time"])
+    prev = None
+    for d, post in pending:
+        t = dt.datetime.fromisoformat(post["time"]).astimezone(KST)
+        h, m = SLOTS[0]
+        want = t.replace(hour=h, minute=m, second=0, microsecond=0)
+        if want < t:
+            want += dt.timedelta(days=1)
+        if prev and want.date() <= prev.date():
+            want = (prev + dt.timedelta(days=1)).replace(hour=h, minute=m)
+        prev = want
+        if want == t:
+            continue
+        post["time"] = want.isoformat(timespec="seconds")
+        (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
+        suffix = d.name.split("-", 4)[4] if d.name.count("-") >= 4 else d.name
+        new = POSTS / f"{want:%Y-%m-%d-%H%M}-{suffix}"
+        if not new.exists():
+            d.rename(new)
+        print("one per day", d.name, "->", new.name, post["time"])
+
+
 def due_post(now):
     for d in sorted(POSTS.iterdir()):
         pj = d / "post.json"
@@ -127,6 +156,7 @@ def main():
             print(f"cooling down after Instagram action block until {until.isoformat()}")
             return
     reschedule_stale(now)
+    one_per_day(now)
     # 하루 1개만 올라가도록 최근 게시 후 20시간은 쉰다
     last = [dt.datetime.fromisoformat(json.loads(p.read_text(encoding="utf-8"))["posted_at"])
             for p in POSTS.glob("*/posted.json")]
