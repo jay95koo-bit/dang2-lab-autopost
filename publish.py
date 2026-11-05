@@ -56,28 +56,60 @@ def wait_ready(cid):
 COMMENT = ""
 
 KST = dt.timezone(dt.timedelta(hours=9))
-SLOTS = [(12, 30)]  # 게시 시간대 (KST) - 활동 제한을 피하려고 하루 1개만 올린다
+# 매일 같은 시각에 올리면 자동화로 보이기 쉬워서, 하루 1개를 이 시간대(KST) 안의 무작위 시각에 올린다
+WINDOW = ((9, 0), (22, 0))
+MIN_GAP = dt.timedelta(hours=16)  # 연달아 올리는 두 게시물 사이 최소 간격
 STALE = dt.timedelta(hours=6)  # 이보다 오래 밀린 게시물은 맨 뒤로 미룬다
 
 
-def next_slot(after):
+def random_time(day, not_before):
+    """day(KST 날짜)의 게시 시간대 안에서 not_before 이후 무작위 시각. 넣을 자리가 없으면 None."""
+    (h1, m1), (h2, m2) = WINDOW
+    lo = dt.datetime(day.year, day.month, day.day, h1, m1, tzinfo=KST)
+    hi = dt.datetime(day.year, day.month, day.day, h2, m2, tzinfo=KST)
+    lo = max(lo, not_before.astimezone(KST))
+    if lo >= hi:
+        return None
+    mins = int((hi - lo).total_seconds() // 60)
+    t = lo + dt.timedelta(minutes=random.randint(1, max(mins, 1)))
+    return t.replace(second=0, microsecond=0)
+
+
+def next_slot(after, prev=None):
+    """after 다음 날짜부터, 직전 게시물(prev)과 MIN_GAP 이상 떨어진 무작위 시각."""
     t = after.astimezone(KST)
-    for day in range(4):
-        base = (t + dt.timedelta(days=day)).date()
-        for h, m in SLOTS:
-            c = dt.datetime(base.year, base.month, base.day, h, m, tzinfo=KST)
-            if c > t:
-                return c
+    floor = max(t, prev + MIN_GAP) if prev else t
+    for day in range(0, 5):
+        c = random_time((t + dt.timedelta(days=day)).date(), floor)
+        if c:
+            return c
     raise RuntimeError("no slot")
 
 
-def reschedule_stale(now):
-    """오래 밀린 게시물을 몰아 올리지 않도록 예약된 마지막 게시물 다음 시간대로 옮긴다."""
+def move(d, post, when, why):
+    post["time"] = when.isoformat(timespec="seconds")
+    post["random_time"] = True
+    (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
+    suffix = d.name.split("-", 4)[4] if d.name.count("-") >= 4 else d.name
+    new = POSTS / f"{when:%Y-%m-%d-%H%M}-{suffix}"
+    if not new.exists():
+        d.rename(new)
+    print(why, d.name, "->", new.name, post["time"])
+
+
+def pending_posts():
     pending = []
     for d in sorted(POSTS.iterdir()):
         pj = d / "post.json"
         if pj.exists() and not (d / "posted.json").exists():
             pending.append((d, json.loads(pj.read_text(encoding="utf-8"))))
+    pending.sort(key=lambda x: x[1]["time"])
+    return pending
+
+
+def reschedule_stale(now):
+    """오래 밀린 게시물을 몰아 올리지 않도록 예약된 마지막 게시물 다음 날 무작위 시각으로 옮긴다."""
+    pending = pending_posts()
     if not pending:
         return
     last = max(dt.datetime.fromisoformat(p["time"]) for _, p in pending)
@@ -85,44 +117,36 @@ def reschedule_stale(now):
         t = dt.datetime.fromisoformat(post["time"])
         if now - t <= STALE:
             continue
-        last = next_slot(max(last, now))
-        post["time"] = last.isoformat(timespec="seconds")
-        (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
-        suffix = d.name.split("-", 4)[4] if d.name.count("-") >= 4 else d.name
-        new = POSTS / f"{last:%Y-%m-%d-%H%M}-{suffix}"
-        if not new.exists():
-            d.rename(new)
-        print("rescheduled", d.name, "->", new.name, post["time"])
+        base = max(last, now).astimezone(KST)
+        last = next_slot((base + dt.timedelta(days=1)).replace(hour=0, minute=0), prev=last)
+        move(d, post, last, "rescheduled")
 
 
 def one_per_day(now):
-    """남은 게시물이 하루 1개(12:30)가 되도록 시간을 맞춘다. 주간 작업이 하루 2개로 만들어도 여기서 정리된다."""
-    pending = []
-    for d in sorted(POSTS.iterdir()):
-        pj = d / "post.json"
-        if pj.exists() and not (d / "posted.json").exists():
-            pending.append((d, json.loads(pj.read_text(encoding="utf-8"))))
-    pending.sort(key=lambda x: x[1]["time"])
+    """남은 게시물을 하루 1개, 날마다 다른 무작위 시각으로 맞춘다. 주간 작업이 정해진 시각으로 만들어도 여기서 섞인다."""
     prev = None
-    for d, post in pending:
-        t = dt.datetime.fromisoformat(post["time"]).astimezone(KST)
-        h, m = SLOTS[0]
-        want = t.replace(hour=h, minute=m, second=0, microsecond=0)
-        if want < t:
-            want += dt.timedelta(days=1)
-        if prev and want.date() <= prev.date():
-            want = (prev + dt.timedelta(days=1)).replace(hour=h, minute=m)
-        prev = want
+    posted = [dt.datetime.fromisoformat(json.loads(p.read_text(encoding="utf-8"))["posted_at"])
+              for p in POSTS.glob("*/posted.json")]
+    if posted:
+        prev = max(posted)
+    for d, post in pending_posts():
+        t = dt.datetime.fromisoformat(post["time"])
         # 이미 시간이 지난 게시물은 폴더를 옮기지 않는다 (옮기면 이번 실행의 이미지 주소가 아직 GitHub에 없다)
-        if want == t or want <= now:
+        if t <= now:
+            prev = t
             continue
-        post["time"] = want.isoformat(timespec="seconds")
-        (d / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
-        suffix = d.name.split("-", 4)[4] if d.name.count("-") >= 4 else d.name
-        new = POSTS / f"{want:%Y-%m-%d-%H%M}-{suffix}"
-        if not new.exists():
-            d.rename(new)
-        print("one per day", d.name, "->", new.name, post["time"])
+        tk = t.astimezone(KST)
+        ok = (post.get("random_time") and (not prev or (t - prev >= MIN_GAP and tk.date() > prev.astimezone(KST).date())))
+        if ok:
+            prev = t
+            continue
+        day = tk.date()
+        if prev and day <= prev.astimezone(KST).date():
+            day = prev.astimezone(KST).date() + dt.timedelta(days=1)
+        start = dt.datetime(day.year, day.month, day.day, tzinfo=KST)
+        want = next_slot(max(start, now + dt.timedelta(minutes=30)), prev=prev)
+        move(d, post, want, "shuffled")
+        prev = want
 
 
 def due_post(now):
@@ -158,10 +182,10 @@ def main():
             return
     reschedule_stale(now)
     one_per_day(now)
-    # 하루 1개만 올라가도록 최근 게시 후 20시간은 쉰다
+    # 하루 1개만 올라가도록 최근 게시 후 15시간은 쉰다 (예약 간격은 16시간 이상)
     last = [dt.datetime.fromisoformat(json.loads(p.read_text(encoding="utf-8"))["posted_at"])
             for p in POSTS.glob("*/posted.json")]
-    if last and now - max(last) < dt.timedelta(hours=20):
+    if last and now - max(last) < dt.timedelta(hours=15):
         print("posted recently, waiting")
         return
     d, post = due_post(now)
