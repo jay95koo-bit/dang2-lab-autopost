@@ -161,7 +161,7 @@ def due_post(now):
 
 
 COOLDOWN = ROOT / "state" / "cooldown.json"
-BLOCK_PAUSE = dt.timedelta(hours=24)
+BLOCK_PAUSE = dt.timedelta(hours=72)
 
 
 def blocked(e):
@@ -174,7 +174,7 @@ def main():
         print("IG_TOKEN secret is missing - skipping until it is added")
         return
     now = dt.datetime.now(dt.timezone.utc)
-    # Instagram이 활동을 제한하면(action is blocked) 계속 시도할수록 길어지므로 24시간 쉰다
+    # Instagram이 활동을 제한하면(action is blocked) 계속 시도할수록 길어지므로 72시간 쉰다
     if COOLDOWN.exists():
         until = dt.datetime.fromisoformat(json.loads(COOLDOWN.read_text(encoding="utf-8"))["until"])
         if now < until:
@@ -228,7 +228,7 @@ def main():
                 COOLDOWN.parent.mkdir(exist_ok=True)
                 COOLDOWN.write_text(json.dumps({"until": (now + BLOCK_PAUSE).isoformat(), "error": str(e)[:300]},
                                                ensure_ascii=False, indent=1), encoding="utf-8")
-                print(f"::error::Instagram이 활동을 제한했어요. 24시간 쉬고 다시 시도해요: {e}")
+                print(f"::error::Instagram이 활동을 제한했어요. 72시간 쉬고 다시 시도해요: {e}")
                 raise
             if '"code":9007' not in str(e) or attempt == 5:
                 raise
