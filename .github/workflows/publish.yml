@@ -1,7 +1,8 @@
 name: publish to instagram
+# Jay가 직접 올리기로 해서 자동 게시는 껐어요 (11/10). 다시 켜려면 아래 schedule 두 줄의 # 를 지우세요.
 on:
-  schedule:
-    - cron: "*/30 * * * *"
+  # schedule:
+  #   - cron: "*/30 * * * *"
   workflow_dispatch:
 permissions:
   contents: write

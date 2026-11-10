@@ -169,7 +169,13 @@ def blocked(e):
     return "2207051" in s or "action is blocked" in s
 
 
+MANUAL = ROOT / "state" / "manual.json"  # 있으면 자동 게시를 하지 않는다 (Jay가 직접 올림)
+
+
 def main():
+    if MANUAL.exists():
+        print("manual posting mode - Jay posts by hand, skipping")
+        return
     if not TOKEN:
         print("IG_TOKEN secret is missing - skipping until it is added")
         return
