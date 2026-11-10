@@ -5,6 +5,7 @@
       python render.py --local DIR (사진을 DIR/<pexels_id>.jpg 에서 읽음, 테스트용)
 """
 import html
+import re
 import json
 import pathlib
 import sys
@@ -66,8 +67,28 @@ def esc(s):
     return html.escape(s or "")
 
 
+SINGLE_CSS = """
+.sg-shade{position:absolute;left:0;right:0;bottom:0;height:900px;
+  background:linear-gradient(180deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.55) 40%,rgba(0,0,0,.85) 100%)}
+.sg{position:absolute;left:64px;right:56px;bottom:150px;font-size:74px;font-weight:900;line-height:1.32;
+  letter-spacing:-2.5px;white-space:pre-line;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.35)}
+.sg em{font-style:normal;color:#FFD43B}
+.sg-handle{position:absolute;left:64px;bottom:66px;font-size:34px;font-weight:500;color:rgba(255,255,255,.85)}
+"""
+
+
+def _single_html(s, photo_src):
+    # "글자 [[강조]] 글자" -> 노란 강조
+    txt = re.sub(r"\[\[(.+?)\]\]", r"<em>\1</em>", esc(s["text"]))
+    return (f'<html><head><meta charset="utf-8"><style>{CSS}{SINGLE_CSS}</style></head><body>'
+            f'<img class="photo" src="{photo_src}"><div class="sg-shade"></div>'
+            f'<div class="sg">{txt}</div><div class="sg-handle">@{HANDLE}</div></body></html>')
+
+
 def _slide_html(s, photo_src):
     t = s.get("type", "body")
+    if t == "single":
+        return _single_html(s, photo_src)
     if t == "places":
         tiles = []
         for x in s["items"]:
