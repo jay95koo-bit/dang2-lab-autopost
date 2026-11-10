@@ -66,7 +66,7 @@ def esc(s):
     return html.escape(s or "")
 
 
-def slide_html(s, photo_src):
+def _slide_html(s, photo_src):
     t = s.get("type", "body")
     if t == "places":
         tiles = []
@@ -110,6 +110,25 @@ def slide_html(s, photo_src):
                 inner += f'<p>{esc(s["p2"])}</p>'
         parts.append(f'<div class="body">{inner}</div>')
     return f'<html><head><meta charset="utf-8"><style>{CSS}</style></head><body>{"".join(parts)}</body></html>'
+
+
+# "theme": "danger" 인 게시물은 빨간 강조색과 더 진한 그림자로 경고 느낌을 준다
+THEMES = {
+    "danger": """
+.badge,.num{background:#E5484D;color:#fff}
+.handle-top,.handle-bottom,.box{color:#FF6B6B}
+.box{background:rgba(229,72,77,.18);border:2px solid rgba(255,107,107,.6)}
+.shade{background:linear-gradient(180deg,rgba(40,0,0,0) 0%,rgba(30,0,0,.7) 35%,rgba(15,0,0,.95) 100%)}
+.photo{filter:saturate(.75) contrast(1.05)}
+""",
+}
+
+
+def slide_html(s, photo_src, theme=None):
+    out = _slide_html(s, photo_src)
+    if theme in THEMES:
+        out = out.replace("</style>", THEMES[theme] + "</style>", 1)
+    return out
 
 
 def pexels_url(pid):
@@ -214,7 +233,7 @@ def render_post(d, page, cache, used, local_dir):
                 x["_src"] = fetch_photo(x["photo"], cache, local_dir).resolve().as_uri()
         photo = fetch_photo(s["photo"], cache, local_dir).resolve().as_uri() if s.get("photo") else ""
         tmp = d / f"_slide{i}.html"
-        tmp.write_text(slide_html(s, photo), encoding="utf-8")
+        tmp.write_text(slide_html(s, photo, post.get("theme")), encoding="utf-8")
         page.goto(tmp.resolve().as_uri())
         page.wait_for_timeout(300)
         page.screenshot(path=str(d / f"{i}.jpg"), type="jpeg", quality=92)
